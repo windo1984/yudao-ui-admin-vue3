@@ -15,28 +15,37 @@ import { getAccessToken } from '@/utils/auth'
  * 就说明网关已经替我们把令牌换好了，即已登录。
  */
 
-/** sessionStorage 标记：本次会话已经确认过 SSO 有效，避免每次路由跳转都探测一次 */
-const SSO_FLAG_KEY = 'SSO_SESSION_VALID'
-
-/** 探测的超时时间：网关换令牌要串两次 HTTP（DaxPay + yudao），不能掐太死 */
-const PROBE_TIMEOUT = 6000
-
-let probePromise: Promise<boolean> | undefined
+/**
+ * 本次「页面加载」内是否已经确认过 SSO 有效。
+ *
+ * 刻意用内存变量而不是 sessionStorage：
+ *   · sessionStorage 的标记会跟着标签页一直活下去，DaxPay 那边退出登录后
+ *     用户按 F5 刷新，标记还在 → 守卫直接放行 → 页面停在原地，永远回不到登录页；
+ *   · 换成内存变量后，刷新 = 模块重新求值 = 标记自然丢失，
+ *     每次刷新都会重新探一次（探测很便宜，网关侧还有 1500 秒会话缓存），
+ *     而 SPA 内部的路由跳转仍然共享这个标记，不会每次切菜单都打一次请求。
+ */
+let sessionMarked = false
 
 /** 本地是否存在 yudao 令牌（原有账号密码登录路径） */
 export const hasLocalToken = (): boolean => {
   return Boolean(getAccessToken())
 }
 
-/** 是否处于统一登录会话中（已在本次会话中确认过） */
+/** 是否处于统一登录会话中（本次页面加载内已确认过） */
 export const isSsoSessionMarked = (): boolean => {
-  return sessionStorage.getItem(SSO_FLAG_KEY) === '1'
+  return sessionMarked
 }
 
 /** 清掉 SSO 标记：退出登录、网关返回 401 时调用 */
 export const clearSsoSession = (): void => {
-  sessionStorage.removeItem(SSO_FLAG_KEY)
+  sessionMarked = false
 }
+
+/** 探测的超时时间：网关换令牌要串两次 HTTP（DaxPay + yudao），不能掐太死 */
+const PROBE_TIMEOUT = 6000
+
+let probePromise: Promise<boolean> | undefined
 
 /**
  * 探测统一登录会话是否有效。
@@ -47,16 +56,14 @@ export const hasSsoSession = (): Promise<boolean> => {
   if (hasLocalToken()) {
     return Promise.resolve(true)
   }
-  if (isSsoSessionMarked()) {
+  if (sessionMarked) {
     return Promise.resolve(true)
   }
   // 并发路由跳转时共用同一次探测，避免重复请求
   if (!probePromise) {
     probePromise = probe()
       .then((valid) => {
-        if (valid) {
-          sessionStorage.setItem(SSO_FLAG_KEY, '1')
-        }
+        sessionMarked = valid
         return valid
       })
       .finally(() => {

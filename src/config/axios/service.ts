@@ -17,6 +17,7 @@ import { isCanceledByRequestCancellation, throwIfRequestCanceled } from './reque
 import { resetRouter } from '@/router'
 import { deleteUserCache } from '@/hooks/web/useCache'
 import { ApiEncrypt } from '@/utils/encrypt'
+import { clearSsoSession, isSsoSessionMarked } from '@/utils/sso'
 
 const tenantEnable = import.meta.env.VITE_APP_TENANT_ENABLE
 const { result_code, base_url, request_timeout } = config
@@ -276,6 +277,18 @@ const handleAuthorized = () => {
     // 如果已经到登录页面则不进行弹窗提示
     if (window.location.href.includes('login')) {
       return
+    }
+    // 统一登录（DaxPay 为入口）场景：本地没有刷新令牌，弹「是否重新登录」的确认框
+    // 只会让人卡在一个永远刷不新的页面上。这里直接清标记 + 清缓存 + 跳登录页，
+    // 用户在 DaxPay 重新登录后回到 yudao 会被网关重新换出令牌。
+    if (isSsoSessionMarked()) {
+      clearSsoSession()
+      resetRouter()
+      deleteUserCache()
+      removeToken()
+      isRelogin.show = false
+      window.location.href = '/login'
+      return Promise.reject(t('sys.api.timeoutMessage'))
     }
     isRelogin.show = true
     ElMessageBox.confirm(t('sys.api.timeoutMessage'), t('common.confirmTitle'), {
