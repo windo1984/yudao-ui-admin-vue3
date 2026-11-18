@@ -1,6 +1,7 @@
 import { store } from '@/store'
 import { defineStore } from 'pinia'
-import { getAccessToken, removeToken } from '@/utils/auth'
+import { removeToken } from '@/utils/auth'
+import { clearSsoSession, hasLocalToken, isSsoSessionMarked } from '@/utils/sso'
 import { CACHE_KEY, useCache, deleteUserCache } from '@/hooks/web/useCache'
 import { getInfo, loginOut } from '@/api/login'
 
@@ -49,7 +50,9 @@ export const useUserStore = defineStore('admin-user', {
   },
   actions: {
     async setUserInfoAction() {
-      if (!getAccessToken()) {
+      // 统一登录会话下本地没有 ACCESS_TOKEN，但网关已经替我们注入了 yudao 令牌，
+      // 所以这里不能只看本地令牌，否则 SSO 用户会被判成未登录、直接清空状态。
+      if (!hasLocalToken() && !isSsoSessionMarked()) {
         this.resetState()
         return null
       }
@@ -86,6 +89,8 @@ export const useUserStore = defineStore('admin-user', {
     async loginOut() {
       await loginOut()
       removeToken()
+      // 退出后统一登录会话也可能仍然有效，清掉标记，下次进入重新探测
+      clearSsoSession()
       deleteUserCache() // 删除用户缓存
       this.resetState()
     },

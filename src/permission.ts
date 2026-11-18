@@ -1,7 +1,7 @@
 import router from './router'
 import type { RouteRecordRaw } from 'vue-router'
 import { isRelogin } from '@/config/axios/service'
-import { getAccessToken, removeToken } from '@/utils/auth'
+import { removeToken } from '@/utils/auth'
 import { deleteUserCache } from '@/hooks/web/useCache'
 import { useTitle } from '@/hooks/web/useTitle'
 import { useNProgress } from '@/hooks/web/useNProgress'
@@ -10,6 +10,7 @@ import { useDictStoreWithOut } from '@/store/modules/dict'
 import { useUserStoreWithOut } from '@/store/modules/user'
 import { usePermissionStoreWithOut } from '@/store/modules/permission'
 import { parseRouteLocation } from '@/utils/routeParams'
+import { clearSsoSession, hasLocalToken, hasSsoSession } from '@/utils/sso'
 
 const { start, done } = useNProgress()
 
@@ -33,7 +34,11 @@ const whiteList = [
 router.beforeEach(async (to, from, next) => {
   start()
   loadStart()
-  if (getAccessToken()) {
+  // 是否已登录：本地有 yudao 令牌（账号密码登录），
+  // 或者处于统一登录会话（DaxPay 登录后由 ft-gateway 换出令牌并注入请求头）。
+  // 后者本地永远没有 ACCESS_TOKEN，所以必须探测一次接口，不能只看本地缓存。
+  const authed = hasLocalToken() || (await hasSsoSession())
+  if (authed) {
     if (to.path === '/login') {
       next({ path: '/' })
     } else {
@@ -63,6 +68,8 @@ router.beforeEach(async (to, from, next) => {
           // 详见 issue：https://gitee.com/yudaocode/yudao-ui-admin-vue3/issues/IBJ6SP
           removeToken()
           deleteUserCache()
+          // 统一登录会话也失效了（例如 DaxPay 那边已退出），清掉标记让下次重新探测
+          clearSsoSession()
           next(`/login?redirect=${encodeURIComponent(redirect)}`)
           return
         } finally {

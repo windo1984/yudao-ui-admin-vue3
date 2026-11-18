@@ -40,7 +40,12 @@ const whiteList: string[] = ['/login', '/refresh-token']
 const service: AxiosInstance = axios.create({
   baseURL: base_url, // api 的 base_url
   timeout: request_timeout, // 请求超时时间
-  withCredentials: false, // 禁用 Cookie 等信息
+  // 统一登录（DaxPay 为登录入口）：必须允许跨域携带 Cookie。
+  // DaxPay 登录后下发 HttpOnly Cookie「Accesstoken」（Path=/），
+  // 前端（localhost:80）请求网关（localhost:19200）属于同站不同端口，
+  // Cookie 不区分端口，但跨域 XHR 默认不带凭证，必须显式开启 withCredentials。
+  // 网关（ft-gateway）据此取出 DaxPay 会话，换成 yudao 令牌后注入 Authorization。
+  withCredentials: true,
   // 自定义参数序列化函数
   paramsSerializer: (params) => {
     return qs.stringify(params, { allowDots: true })
