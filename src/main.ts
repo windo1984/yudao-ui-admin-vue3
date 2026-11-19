@@ -44,6 +44,8 @@ import VueDOMPurifyHTML from 'vue-dompurify-html' // 解决v-html 的安全隐�
 
 import print from 'vue3-print-nb' // 打印插件
 
+import { adoptIamTicketFromHost } from '@/utils/iamSso'
+
 // 处理 Vite 预加载模块失败（如重新构建后 chunk 哈希变化），自动刷新页面
 window.addEventListener('vite:preloadError', (event) => {
   event.preventDefault()
@@ -57,6 +59,9 @@ const setupAll = async () => {
   await setupI18n(app)
 
   setupStore(app)
+
+  // 统一认证免登：必须在 setupRouter 之前完成，否则首个路由导航会按“未登录”落回登录页
+  await adoptIamTicketFromHost()
 
   setupGlobCom(app)
 

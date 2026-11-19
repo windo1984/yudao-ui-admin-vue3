@@ -39,6 +39,20 @@ export const login = (data: UserLoginVO) => {
   })
 }
 
+/**
+ * 统一认证（ft-iam ticket）登录
+ *
+ * 基座 ft-layout 以 ft-iam 为唯一登录入口，打开本应用时在地址上挂一次性 ticket；
+ * 这里用 ticket 换本应用自己的令牌，之后所有请求按 yudao 原生方式带 Bearer。
+ */
+export const iamLogin = (ticket: string) => {
+  return request.post<TokenType>({
+    url: '/system/auth/iam-login',
+    data: { ticket },
+    headers: { isToken: false, isEncrypt: false }
+  })
+}
+
 // 沿用登录页已选择的租户，不携带旧登录态。
 export const createQrcode = () => {
   return request.post<AuthQrcodeCreateRespVO>({
